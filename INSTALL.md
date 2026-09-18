@@ -1,150 +1,150 @@
-# TheTensorTune — راهنمای نصب و راه‌اندازی
+# TheTensorTune — Installation & Setup Guide
 
-> نسخه‌ی مستند: **TheTensorTune 1.0** (اولین انتشار عمومی) — تک‌فایل، بدون نیاز به build، بدون دیتابیس خارجی.
-> آموزش گام‌به‌گامِ تصویریِ استفاده، داخل خود پلتفرم در بخش **Learn (آموزش)** قرار دارد.
-
----
-
-## ۱) معرفی
-
-TheTensorTune یک **ورک‌بنچ تنظیم دقیق (Fine-tuning) LoRA** برای مدل‌های زبانی است که کل چرخه‌ی کار را در یک فایل Python جمع می‌کند:
-
-- رابط کاربری نود-گرافی دوزبانه (فارسی RTL کامل + انگلیسی)
-- آموزش واقعی LoRA / QLoRA روی ۸ مدل بین‌المللی (۰٫۵B تا ۷B) یا هر مدل Hugging Face
-- گزارش کیفیت دیتاست، تخمین هزینه/زمان روی ۲۵ GPU، صف job، ادامه‌ی آموزش از checkpoint
-- چت آزمایشی، مقایسه‌ی قبل/بعد (Perplexity)، خروجی **GGUF** برای llama.cpp / Ollama / LM Studio
-- وب‌هوک با امضای HMAC-SHA256 + REST API کامل برای اتوماسیون
-- بخش **Learn** داخلی با آموزش تصویری ۱۲ درسی
+> Documented release: **TheTensorTune 1.0** (first public release) — single file, no build step, no external database.
+> The step-by-step illustrated walkthrough lives inside the platform under the **Learn** tab.
 
 ---
 
-## ۲) پیش‌نیازها
+## 1) Introduction
 
-| نیاز | حداقل | توصیه |
+TheTensorTune is a **LoRA fine-tuning workbench** for language models that fits the entire workflow into a single Python file:
+
+- Bilingual node-graph UI (full RTL Persian + English)
+- Real LoRA / QLoRA training on 8 international model presets (0.5B to 7B) or any Hugging Face model
+- Dataset quality reports, cost/time estimation across 25 GPUs, job queue, training resume from checkpoints
+- Test chat, before/after comparison (Perplexity), **GGUF** export for llama.cpp / Ollama / LM Studio
+- Webhooks signed with HMAC-SHA256 + a complete REST API for automation
+- A built-in **Learn** section with a fully illustrated 12-lesson course
+
+---
+
+## 2) Prerequisites
+
+| Requirement | Minimum | Recommended |
 |---|---|---|
 | Python | 3.10 | 3.12 |
-| RAM | ۴ گیگابایت (مدل ۰٫۵B روی CPU) | ۱۶+ گیگابایت، یا GPU با ۸GB+ VRAM |
-| دیسک | ~۲ گیگابایت (وابستگی‌ها + مدل ۰٫۵B) | ۲۰+ گیگابایت برای مدل‌های بزرگتر و GGUF |
-| GPU | لازم نیست (CPU کار می‌کند) | CUDA برای سرعت واقعی |
-| سیستم‌عامل | لینوکس / macOS / ویندوز | لینوکس |
+| RAM | 4 GB (0.5B model on CPU) | 16+ GB, or a GPU with 8 GB+ VRAM |
+| Disk | ~2 GB (dependencies + 0.5B model) | 20+ GB for larger models and GGUF |
+| GPU | not required (CPU works) | CUDA for real speed |
+| OS | Linux / macOS / Windows | Linux |
 
-> **تجربه‌ی واقعی:** کل توسعه و تست این نسخه روی یک ماشین ۲ هسته‌ای / ۴ گیگابایت RAM بدون GPU انجام شده — آموزش ۰٫۵B، مقایسه و خروجی GGUF همگی روی CPU کار می‌کنند.
+> **Real-world note:** the entire development and testing of this release was done on a 2-core / 4 GB RAM machine with no GPU — 0.5B training, comparison, and GGUF export all work on CPU.
 
 ---
 
-## ۳) نصب وابستگی‌ها
+## 3) Installing dependencies
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate        # ویندوز: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
 pip install flask==3.1.3
-pip install torch                 # نسخه CPU:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install torch                 # CPU build: pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install transformers==5.17.0
 pip install peft==0.21.0
 pip install accelerate==1.15.0
 pip install safetensors==0.8.0
-pip install "huggingface_hub>=0.30"   # نسخه‌های 1.x هم پشتیبانی می‌شوند
+pip install "huggingface_hub>=0.30"   # 1.x versions are also supported
 ```
 
-نسخه‌های تست‌شده‌ی دقیق این محیط: `torch 2.14.0+cpu · transformers 5.17.0 · peft 0.21.0 · accelerate 1.15.0 · safetensors 0.8.0 · huggingface_hub 1.9.2`
+Exact tested versions in this environment: `torch 2.14.0+cpu · transformers 5.17.0 · peft 0.21.0 · accelerate 1.15.0 · safetensors 0.8.0 · huggingface_hub 1.9.2`
 
-K-quants (مثل `q4_k_m`) هنگام خروجی GGUF به `llama-quantize` نیاز دارند — llama.cpp را build کنید یا `TT_LLAMA_CPP` را ست کنید. `f16` و `q8_0` نیازی ندارند.
+K-quants (such as `q4_k_m`) require `llama-quantize` during GGUF export — build llama.cpp or set `TT_LLAMA_CPP`. `f16` and `q8_0` need nothing extra.
 
 ---
 
-## ۴) اجرا
+## 4) Running
 
 ```bash
 python TheTensorTune.py
 ```
 
-پیش‌فرض: رابط در `http://127.0.0.1:<port>` باز می‌شود (پورت آزاد خودکار؛ با `TT_PORT` ثابت کنید). پوشه‌های `datasets/` و `runs/` و فایل `thetensortune.db` کنار فایل ساخته می‌شوند.
+Default: the UI opens at `http://127.0.0.1:<port>` (a free port is chosen automatically; pin it with `TT_PORT`). The `datasets/` and `runs/` folders and the `thetensortune.db` file are created next to the main file.
 
-### متغیرهای محیطی
+### Environment variables
 
-| متغیر | پیش‌فرض | توضیح |
+| Variable | Default | Purpose |
 |---|---|---|
-| `TT_TOKEN` | *(خالی = بدون احراز هویت)* | توکن سرویس. اگر ست شود همه‌ی `/api/*` نیازمند آن است (هدر `X-TT-Token` یا `Authorization: Bearer`). **در شبکه‌ی مشترک حتماً ست کنید** — bind غیرمحلی بدون توکن، هشدار چاپ می‌کند. |
-| `TT_PORT` | پورت آزاد | پورت HTTP |
-| `TT_HOST` | `127.0.0.1` | آدرس bind. برای LAN: `0.0.0.0` + حتماً `TT_TOKEN` |
-| `TT_HEADLESS` | `0` | `1` = مرورگر باز نشود (سرور/کانتینر). `TT_NO_BROWSER` همان است |
-| `TT_DEBUG` | `0` | `1` = لاگ جزئی‌تر |
-| `TT_LLAMA_CPP` | *(خالی)* | مسیر llama-quantize برای K-quants |
-| `TT_WEBHOOK_ALLOW_PRIVATE` | `0` | `1` = اجازه‌ی وب‌هوک به آدرس داخلی (اتوماسیون محلی) |
-| `HF_TOKEN` | *(خالی)* | توکن Hugging Face برای مدل‌های gated (از بلوک مدل هم می‌شود) |
+| `TT_TOKEN` | *(empty = no auth)* | Service token. If set, every `/api/*` route requires it (`X-TT-Token` header or `Authorization: Bearer`). **Always set it on a shared network** — binding to a non-local address without a token prints a warning. |
+| `TT_PORT` | free port | HTTP port |
+| `TT_HOST` | `127.0.0.1` | Bind address. For LAN: `0.0.0.0` + definitely set `TT_TOKEN` |
+| `TT_HEADLESS` | `0` | `1` = do not open a browser (servers/containers). `TT_NO_BROWSER` is the same |
+| `TT_DEBUG` | `0` | `1` = more verbose logging |
+| `TT_LLAMA_CPP` | *(empty)* | Path to llama-quantize for K-quants |
+| `TT_WEBHOOK_ALLOW_PRIVATE` | `0` | `1` = allow webhooks to internal addresses (local automation) |
+| `HF_TOKEN` | *(empty)* | Hugging Face token for gated models (also available in the model block) |
 
-نمونه‌ی امن روی شبکه:
+Secure network example:
 
 ```bash
-TT_TOKEN="یک-رشته‌ی-تصادفی-بلند" TT_HOST=0.0.0.0 TT_PORT=8653 TT_HEADLESS=1 \
+TT_TOKEN="a-long-random-string" TT_HOST=0.0.0.0 TT_PORT=8653 TT_HEADLESS=1 \
 python TheTensorTune.py
 ```
 
 ---
 
-## ۵) اولین ورود
+## 5) First launch
 
-1. آدرس چاپ‌شده در ترمینال را در مرورگر باز کنید.
-2. اگر سرور با `TT_TOKEN` بالا آمده، روی دکمه‌ی **Service token / توکن سرویس** در نوار بالا کلیک کنید، مقدار توکن را وارد و ذخیره کنید (در مرورگر شما ذخیره می‌ماند).
-3. با کلید **FA/EN** زبان رابط را عوض کنید (فارسی راست‌به‌چپ کامل پشتیبانی می‌شود).
-4. روی **آموزش (Learn)** در نوار بالا کلیک کنید — ۱۲ درس تصویری کامل، از آپلود دیتاست تا وب‌هوک.
-5. مسیر `/api/health` عمومی است (برای probe لود‌بالانسر) و هیچ داده‌ی حساسی برنمی‌گرداند.
+1. Open the address printed in the terminal in your browser.
+2. If the server started with `TT_TOKEN`, click the **Service token** button in the top bar, paste the token, and save it (it stays in your browser).
+3. Use the **FA/EN** key to switch the interface language (full right-to-left Persian is supported).
+4. Click **Learn** in the top bar — 12 complete illustrated lessons, from uploading a dataset to webhooks.
+5. The `/api/health` route is public (for load-balancer probes) and returns no sensitive data.
 
 ---
 
-## ۶) شروع سریع (۵ دقیقه)
+## 6) Quick start (5 minutes)
 
 ```bash
-# 1) اجرا
+# 1) Run
 TT_TOKEN=my-secret python TheTensorTune.py
 
-# 2) آپلود دیتاست (یا از داخل UI)
+# 2) Upload a dataset (or do it from the UI)
 curl -X POST http://127.0.0.1:8653/api/dataset \
   -H "X-TT-Token: my-secret" -H "Content-Type: application/json" \
   -d '{"text": "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"},{\"role\":\"assistant\",\"content\":\"hello!\"}]}"}'
 # -> {"id": "ab12cd34ef56", ...}
 
-# 3) شروع آموزش
+# 3) Start training
 curl -X POST http://127.0.0.1:8653/api/run/start \
   -H "X-TT-Token: my-secret" -H "Content-Type: application/json" \
   -d '{"model":{"preset":"Qwen/Qwen2.5-0.5B-Instruct"},"dataset_id":"ab12cd34ef56","lora":{"r":16,"alpha":32},"params":{"lr":2e-4,"epochs":3,"bs":2,"gacc":1,"eval_pct":20}}'
 
-# 4) پایش
+# 4) Monitor
 curl http://127.0.0.1:8653/api/run/status -H "X-TT-Token: my-secret"
 
-# 5) چت
+# 5) Chat
 curl -X POST http://127.0.0.1:8653/api/infer \
   -H "X-TT-Token: my-secret" -H "Content-Type: application/json" \
   -d '{"run_id":1,"messages":[{"role":"user","content":"hi"}],"max_new":32}'
 
-# 6) خروجی GGUF (پیشرفت: /api/task/status)
+# 6) GGUF export (progress: /api/task/status)
 curl -X POST http://127.0.0.1:8653/api/gguf/export \
   -H "X-TT-Token: my-secret" -H "Content-Type: application/json" \
   -d '{"run_id":1,"quant":"q8_0"}'
 ```
 
-همین جریان به‌صورت تصویری و گام‌به‌گام داخل پلتفرم: **آموزش ← درس‌های ۳ تا ۱۱**.
+The same flow, illustrated step by step, is inside the platform: **Learn → lessons 3 to 11**.
 
 ---
 
-## ۷) نقشه‌ی کامل REST API
+## 7) Complete REST API map
 
-احراز هویت: همه‌ی مسیرهای `/api/*` (به‌جز `/api/health`) با `TT_TOKEN` محافظت می‌شوند — هدر `X-TT-Token: <token>` یا `Authorization: Bearer <token>`.
+Authentication: all `/api/*` routes (except `/api/health`) are protected by `TT_TOKEN` — header `X-TT-Token: <token>` or `Authorization: Bearer <token>`.
 
-**عمومی:** `GET /` (رابط کاربری) · `GET /api/health` (سلامت، عمومی) · `GET /learn_img/<Lxx>` (تصاویر آموزشی، عمومی)
+**Public:** `GET /` (UI) · `GET /api/health` (health, public) · `GET /learn_img/<Lxx>` (lesson images, public)
 
-**سیستم و مدل‌ها:** `GET /api/system` · `GET /api/models` · `GET /api/models/search?q=` · `GET|POST /api/settings`
+**System & models:** `GET /api/system` · `GET /api/models` · `GET /api/models/search?q=` · `GET|POST /api/settings`
 
-**دیتاست:** `POST /api/dataset` (JSON `{text}` یا multipart فایل) · `GET /api/dataset/info?id=` · `POST /api/dataset/analyze`
+**Dataset:** `POST /api/dataset` (JSON `{text}` or multipart file) · `GET /api/dataset/info?id=` · `POST /api/dataset/analyze`
 
-**آموزش:** `POST /api/run/start` · `POST /api/run/stop` · `POST /api/run/resume` · `GET /api/run/status` · `POST /api/estimate` · `POST /api/jobs` (آسنکرون + وب‌هوک الزامی) · `GET /api/jobs` · `GET /api/jobs/<id>` · `POST /api/jobs/<id>/cancel` · `GET /api/runs` · `POST /api/runs/clear`
+**Training:** `POST /api/run/start` · `POST /api/run/stop` · `POST /api/run/resume` · `GET /api/run/status` · `POST /api/estimate` · `POST /api/jobs` (async + webhook required) · `GET /api/jobs` · `GET /api/jobs/<id>` · `POST /api/jobs/<id>/cancel` · `GET /api/runs` · `POST /api/runs/clear`
 
-**استنتاج و خروجی:** `POST /api/infer` (حالت‌های auto/adapter/merged/base) · `POST /api/compare` · `POST /api/gguf/export` · `GET /api/task/status`
+**Inference & export:** `POST /api/infer` (auto/adapter/merged/base modes) · `POST /api/compare` · `POST /api/gguf/export` · `GET /api/task/status`
 
-### وب‌هوک (آسنکرون)
+### Webhooks (async)
 
-پایان job به آدرس شما POST می‌شود با هدرها:
+When a job finishes, a POST is sent to your endpoint with these headers:
 
 ```
 Content-Type: application/json
@@ -152,7 +152,7 @@ X-TT-Signature: sha256=<hmac-sha256(body, TT_TOKEN)>
 User-Agent: TheTensorTune/<version>
 ```
 
-تأیید امضا در مقصد (Python):
+Verifying the signature at the destination (Python):
 
 ```python
 import hmac, hashlib
@@ -161,71 +161,71 @@ if hmac.compare_digest(expected, request.headers["X-TT-Signature"]):
     payload = json.loads(raw_body_bytes)
 ```
 
-> مقاصد خصوصی/loopback بلاک می‌شوند؛ برای اتوماسیون کاملاً محلی `TT_WEBHOOK_ALLOW_PRIVATE=1`.
+> Private/loopback destinations are blocked; for fully local automation use `TT_WEBHOOK_ALLOW_PRIVATE=1`.
 
 ---
 
-## ۸) نگهداری
+## 8) Maintenance
 
-| مسیر | نقش |
+| Path | Role |
 |---|---|
-| `datasets/` | دیتاست‌های آپلود‌شده (هر فایل = یک id) |
-| `runs/run-<timestamp>/` | هر آموزش: `adapter/`، `merged/` (بعد از export)، `config.json` (بدون توکن HF)، `model-*.gguf` |
-| `thetensortune.db` | SQLite — تاریخچه‌ی runها و jobها (بعد از ری‌استارت باقی می‌ماند) |
-| `~/.cache/huggingface/` | کش مدل‌های دانلود‌شده |
+| `datasets/` | Uploaded datasets (one file per id) |
+| `runs/run-<timestamp>/` | Each training run: `adapter/`, `merged/` (after export), `config.json` (no HF token), `model-*.gguf` |
+| `thetensortune.db` | SQLite — run and job history (survives restarts) |
+| `~/.cache/huggingface/` | Cache of downloaded models |
 
-بکاپ = کپی همین پوشه‌ها. پاک‌سازی دیسک: `runs/*/merged` بزرگترین مصرف‌کننده است (وزن fp32) — پس از گرفتن GGUF قابل حذف است.
+Backups = copying these folders. Disk cleanup: `runs/*/merged` is the biggest consumer (fp32 weights) — it can be deleted once you have the GGUF.
 
 ---
 
-## ۹) رفع اشکال
+## 9) Troubleshooting
 
-| نشانه | راه‌حل |
+| Symptom | Fix |
 |---|---|
-| `401 unauthorized` در UI | توکن ست نشده/غلط — دکمه‌ی توکن سرویس در نوار بالا |
-| `no training stack` در نوار پایین | `pip install torch transformers peft accelerate` |
-| OOM در آموزش‌های پشت‌سرهم | این نسخه حافظه را بین jobها آزاد می‌کند؛ اگر باز کم آورد، `bs` کم و `gacc` زیاد |
-| جستجوی Hub خالی | شبکه/فیلتر — گزینه‌ی Mirror (hf-mirror.com) در بلوک مدل |
-| خطای llama-quantize برای K-quant | `TT_LLAMA_CPP` را ست کنید؛ `f16`/`q8_0` نیاز ندارند |
-| `[Errno 28] No space left on device` | دیسک پر — `runs/*/merged` و GGUFهای قدیمی را پاک کنید |
-| پاسخ‌های بی‌معنا بعد از آموزش | lr زیادی بوده (مثل 1.0) — با `2e-4` دوباره آموزش بدهید |
+| `401 unauthorized` in the UI | Token not set or wrong — use the Service token button in the top bar |
+| `no training stack` in the status bar | `pip install torch transformers peft accelerate` |
+| OOM in back-to-back trainings | This release frees memory between jobs; if it still runs short, lower `bs` and raise `gacc` |
+| Empty Hub search | Network/filtering — a Mirror option (hf-mirror.com) is available in the model block |
+| llama-quantize error for K-quant | Set `TT_LLAMA_CPP`; `f16`/`q8_0` do not need it |
+| `[Errno 28] No space left on device` | Disk full — delete `runs/*/merged` and old GGUF files |
+| Meaningless replies after training | The learning rate was too high (e.g., 1.0) — retrain with `2e-4` |
 
 ---
 
-## ۱۰) امنیت این نسخه
+## 10) Security of this release
 
-- مسیرهای dataset id به پوشه‌ی `datasets/` قفل شده‌اند (بدون path traversal)
-- `out_dir` فقط داخل `runs/` پذیرفته می‌شود
-- همه‌ی رندرهای HTML سمت کلاینت escape می‌شوند (بدون XSS ذخیره‌ای)
-- وب‌هوک: فیلتر SSRF + پاک‌سازی CRLF + امضای HMAC-SHA256
-- مقایسه‌ی توکن constant-time؛ توکن در query string حذف شده
-- توکن HF هرگز در `config.json` روی دیسک نوشته نمی‌شود
-- بررسی Origin روی POSTهای مرورگری (ضد CSRF)
-- whitelist روی نام quant خروجی GGUF
-- آپلود فایل در UI هدر توکن را ارسال می‌کند
+- Dataset id routes are locked to the `datasets/` folder (no path traversal)
+- `out_dir` is only accepted inside `runs/`
+- All client-side HTML rendering is escaped (no stored XSS)
+- Webhooks: SSRF filtering + CRLF sanitization + HMAC-SHA256 signature
+- Constant-time token comparison; tokens removed from query strings
+- The HF token is never written to `config.json` on disk
+- Origin checks on browser POSTs (anti-CSRF)
+- Whitelist on GGUF export quant names
+- File upload in the UI sends the token header
 
 ---
 
-## ۱۱) تاریخچه‌ی نسخه
+## 11) Version history
 
-| نسخه | تغییرات |
+| Version | Changes |
 |---|---|
-| **1.0** | اولین انتشار عمومی — پلتفرم کامل با تست ۵۰ سناریو (۳۰ + ۲۰)، رگرسیون امنیتی ۶/۶، بخش Learn با آموزش تصویری ۱۲ درسی دوزبانه، این راهنما |
+| **1.0** | First public release — complete platform tested against 50 scenarios (30 + 20), 6/6 security regressions passed, Learn section with a bilingual illustrated 12-lesson course, this guide |
 
 ---
 
-## ۱۲) لایسنس
+## 12) License
 
-TheTensorTune تحت **Apache License 2.0** منتشر می‌شود (فایل `LICENSE` در همین بسته).
+TheTensorTune is released under the **Apache License 2.0** (see the `LICENSE` file in this package).
 
-به زبان ساده یعنی:
+In plain terms:
 
-- استفاده، تغییر، توزیع و استفاده‌ی **تجاری** مجاز و رایگان است
-- باید نسخه‌ای از `LICENSE` را همراه توزیع خود ببرید و فایل‌های تغییریافته را علامت‌گذاری کنید
-- نام و برند «TheTensorTune» تحت این لایسنس منتقل نمی‌شود (بند Trademarks)
-- اعطای صریح **حق ثبت اختراع** از طرف مشارکت‌کنندگان + خاتمه خودکار آن در صورت دعوای اختراعی (بند ۳)
-- کد «همان‌طور که هست» ارائه می‌شود؛ بدون ضمانت و بدون مسئولیت خسارت (بندهای ۷ و ۸)
+- Use, modification, distribution, and **commercial** use are permitted and free
+- You must include a copy of the `LICENSE` with your distribution and mark modified files
+- The name and brand "TheTensorTune" are not transferred under this license (Trademarks clause)
+- Contributors grant an explicit **patent license** + automatic termination in case of patent litigation (Section 3)
+- The code is provided "as is"; no warranty and no liability for damages (Sections 7 and 8)
 
-وابستگی‌های اجرایی همراه بسته نمی‌آیند و هر کدام تحت لایسنس خودشان باقی می‌مانند: Flask و PyTorch (BSD-3-Clause) · transformers، peft، accelerate، safetensors و huggingface_hub (Apache-2.0).
+Runtime dependencies are not bundled and remain under their own licenses: Flask and PyTorch (BSD-3-Clause) · transformers, peft, accelerate, safetensors, and huggingface_hub (Apache-2.0).
 
-مدل‌های پایه‌ای که با این ابزار تنظیم دقیق می‌شوند و خروجی‌های adapter/GGUF که تولید می‌شود، تابع لایسنس خود مدل پایه هستند و رعایت آن با کاربر است.
+Base models fine-tuned with this tool — and the adapter/GGUF outputs produced — remain subject to the base model's own license, and compliance with it is the user's responsibility.
