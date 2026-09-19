@@ -575,7 +575,7 @@ def estimate_run(cfg):
 
 GGUF_MAGIC = b"GGUF"
 GT_F32, GT_F16, GT_Q8_0 = 0, 1, 8
-KV_U32, KV_F32, KV_BOOL, KV_STR, KV_ARR, KV_U64 = 4, 6, 7, 8, 9, 10
+KV_U32, KV_F32, KV_BOOL, KV_STR, KV_ARR, KV_U64, KV_I32 = 4, 6, 7, 8, 9, 10, 5
 FTYPE = {"f32": 0, "f16": 1, "q8_0": 7}
 ALIGN = 32
 
@@ -687,6 +687,8 @@ def gguf_pack_kv(key, typ, val):
                 out += gguf_pack_string(str(it))
             elif ityp == KV_U32:
                 out += st.pack("<I", int(it))
+            elif ityp == KV_I32:
+                out += st.pack("<i", int(it))
             elif ityp == KV_F32:
                 out += st.pack("<f", float(it))
             else:
@@ -835,7 +837,12 @@ def gguf_convert(src_dir, out_path, quant="f16", tok=None, say=lambda m: None):
     for p in plan:
         row = int(p["shape"][-1])
         numel = p["shape"][0] * row if len(p["shape"]) > 1 else row
-        if quant == "q8_0" and (row % 32 or numel % 32):
+        if len(p["shape"]) == 1:
+            # llama.cpp convention: 1-D tensors (norms, biases) are always
+            # stored as f32; f16/f32-quantized weights multiply f32
+            # activations and ggml does not support mixed f32 x f16 muls
+            p["gt"] = GT_F32
+        elif quant == "q8_0" and (row % 32 or numel % 32):
             say("%s row %d not multiple of 32, keeping f16" % (p["gguf"], row))
             p["gt"] = GT_F16
         else:
@@ -845,6 +852,15 @@ def gguf_convert(src_dir, out_path, quant="f16", tok=None, say=lambda m: None):
     vinfo = None
     if tok is not None:
         vinfo = gguf_vocab(tok, src_dir)
+    # pad tokenizer arrays to the model's full vocab_size (llama.cpp requires
+    # the tokens array to cover every embedding row; HF pads e.g. Qwen2.5
+    # 151665 -> 151936)
+    _vs = int(cfg.get("vocab_size", 0))
+    if vinfo and _vs > len(vinfo["tokens"]):
+        for _i in range(len(vinfo["tokens"]), _vs):
+            vinfo["tokens"].append("[PAD%d]" % _i)
+            vinfo["types"].append(4)   # UNUSED per llama.cpp TokenType
+            vinfo["scores"].append(0.0)
     if vinfo is None:
         say("no tokenizer.json found - writing without vocab (llama.cpp "
             "will not load this; use it for pipeline checks only)")
@@ -857,7 +873,7 @@ def gguf_convert(src_dir, out_path, quant="f16", tok=None, say=lambda m: None):
     if vinfo:
         kvs.append(("tokenizer.ggml.model", KV_STR, vinfo["model"]))
         kvs.append(("tokenizer.ggml.tokens", KV_ARR, (KV_STR, vinfo["tokens"])))
-        kvs.append(("tokenizer.ggml.token_type", KV_ARR, (KV_U32, vinfo["types"])))
+        kvs.append(("tokenizer.ggml.token_type", KV_ARR, (KV_I32, vinfo["types"])))
         kvs.append(("tokenizer.ggml.scores", KV_ARR, (KV_F32, vinfo["scores"])))
         if vinfo["merges"]:
             kvs.append(("tokenizer.ggml.merges", KV_ARR, (KV_STR, vinfo["merges"])))
@@ -865,9 +881,9 @@ def gguf_convert(src_dir, out_path, quant="f16", tok=None, say=lambda m: None):
             kvs.append(("tokenizer.ggml.bos_token_id", KV_U32, vinfo["bos"]))
         if vinfo.get("eos") is not None:
             kvs.append(("tokenizer.ggml.eos_token_id", KV_U32, vinfo["eos"]))
-        kvs.append(("tokenizer.ggml.add_bos_token", KV_U32,
-                    1 if (vinfo.get("bos") is not None and arch in ("llama", "phi3")) else 0))
-        kvs.append(("tokenizer.ggml.add_eos_token", KV_U32, 0))
+        kvs.append(("tokenizer.ggml.add_bos_token", KV_BOOL,
+                    bool(vinfo.get("bos") is not None and arch in ("llama", "phi3"))))
+        kvs.append(("tokenizer.ggml.add_eos_token", KV_BOOL, False))
         tmpl = None
         ctpl = Path(src_dir) / "chat_template.jinja"
         if ctpl.exists():
@@ -877,6 +893,8 @@ def gguf_convert(src_dir, out_path, quant="f16", tok=None, say=lambda m: None):
         if tmpl:
             kvs.append(("tokenizer.chat_template", KV_STR, tmpl))
     p = arch
+    kvs.append((p + ".vocab_size", KV_U32, int(cfg.get("vocab_size",
+                 len(vinfo["tokens"]) if vinfo else 0))))
     kvs.append((p + ".context_length", KV_U32, cfg.get("max_position_embeddings", 4096)))
     kvs.append((p + ".embedding_length", KV_U32, hidden))
     kvs.append((p + ".block_count", KV_U32, nlayers))
